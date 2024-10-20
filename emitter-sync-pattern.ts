@@ -59,22 +59,68 @@ class EventHandler extends EventStatistics<EventName> {
     super();
     this.repository = repository;
 
-    emitter.subscribe(EventName.EventA, () =>
-      this.repository.saveEventData(EventName.EventA, 1)
-    );
+    for (let item in EventName) {
+      const typedItem = item as keyof typeof EventName
+
+      emitter.subscribe(EventName[typedItem], () =>{
+        this.repository.saveEventData(EventName[typedItem], 1)
+        this.setStats(EventName[typedItem], this.getStats(EventName[typedItem]) + 1)
+      });
+    }
   }
 }
+
+type notSavedDataType = {[key in EventName]?: number}
 
 class EventRepository extends EventDelayedRepository<EventName> {
   // Feel free to edit this class
 
+  notSavedData: notSavedDataType
+  lastRequestTime: number
+
+  constructor() {
+    super();
+    this.notSavedData = {}
+  }
+
   async saveEventData(eventName: EventName, _: number) {
     try {
-      await this.updateEventStatsBy(eventName, 1);
+      let valueToSave = 1;      
+      if (this.notSavedData[eventName]) {
+        valueToSave = this.notSavedData[eventName] + 1
+      }
+
+      await this.updateEventStatsBy(eventName, valueToSave);
+      this.updateNotSavedData(eventName, true)
       this;
     } catch (e) {
+      this.updateNotSavedData(eventName, false)
       // const _error = e as EventRepositoryError;
       // console.warn(error);
+    }
+  }
+
+  private updateNotSavedData(eventName: EventName, deleteEvent: boolean) {
+    // Очищаем значение, которое прошло сохранение
+    if (deleteEvent) {
+      const newObj: notSavedDataType = {}
+      Object.keys(this.notSavedData).forEach(key => {
+        const typedKey = key as EventName
+        if (typedKey !== eventName) {
+          newObj[typedKey] = this.notSavedData[typedKey] 
+        }
+      })
+
+      this.notSavedData = newObj
+      return;
+    }
+
+    if (this.notSavedData[eventName]) {
+      this.notSavedData[eventName] = this.notSavedData[eventName] + 1
+      return;
+    } else {
+      this.notSavedData[eventName] = 1
+      return;
     }
   }
 }
